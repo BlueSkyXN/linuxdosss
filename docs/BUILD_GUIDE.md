@@ -18,7 +18,7 @@ Windows exe 已打包完成，位于 `dist/LinuxDoHelper_v8.0_Windows.exe`
 brew install python@3.11
 
 # 2. 安装依赖
-pip3 install DrissionPage pyinstaller
+pip3 install DrissionPage pystray pillow pyinstaller
 
 # 3. 安装 Chrome 浏览器
 # 从 https://www.google.com/chrome/ 下载安装
@@ -79,7 +79,7 @@ sudo yum install python3 python3-pip python3-tkinter
 sudo pacman -S python python-pip tk
 
 # 安装依赖
-pip3 install DrissionPage pyinstaller
+pip3 install DrissionPage pystray pillow pyinstaller
 
 # 安装 Chrome 浏览器
 # Ubuntu/Debian
@@ -156,11 +156,30 @@ A: 安装 python3-tk 包
 
 ```bash
 # 安装依赖
-pip install DrissionPage
+pip install DrissionPage pystray pillow
 
 # 运行
 python linux_do_gui.py
 ```
+
+---
+
+## GitHub Actions 自动打包（PyInstaller + Nuitka）
+
+仓库已提供 GitHub Actions 工作流，可在提交或打 Tag 时自动打包多平台可执行文件：
+
+- PyInstaller 工作流: `.github/workflows/build-pyinstaller.yml`
+- Nuitka 工作流: `.github/workflows/build-nuitka.yml`
+
+### 使用方式
+
+1. 创建并推送版本 Tag（示例）：
+   ```bash
+   git tag v8.1.0
+   git push origin v8.1.0
+   ```
+2. GitHub Actions 将自动构建并上传对应平台的产物到 Release。
+3. 如需手动触发，可在 Actions 页面使用 `workflow_dispatch` 并填写 `version`。
 
 ---
 
