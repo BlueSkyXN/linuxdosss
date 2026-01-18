@@ -43,7 +43,7 @@ def get_icon_path():
     return os.path.join(base_path, 'icon.ico')
 
 
-def create_tray_image(color='#0f3460'):
+def create_tray_image(color="#A7B8FF"):
     """创建托盘图标图像"""
     size = 64
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
@@ -55,12 +55,12 @@ def create_tray_image(color='#0f3460'):
 
     # 内圈
     inner_padding = 12
-    draw.ellipse([inner_padding, inner_padding, size - inner_padding, size - inner_padding], fill='#1a1a2e')
+    draw.ellipse([inner_padding, inner_padding, size - inner_padding, size - inner_padding], fill="#FFFFFF")
 
     # 中心点
     center = size // 2
     dot_size = 8
-    draw.ellipse([center - dot_size, center - dot_size, center + dot_size, center + dot_size], fill='#00d9ff')
+    draw.ellipse([center - dot_size, center - dot_size, center + dot_size, center + dot_size], fill="#7FE7C4")
 
     return img
 
@@ -170,6 +170,138 @@ CFG = {
         "茅塞顿开，感谢楼主",
     ],
 }
+
+
+# 清新渐变 + 马卡龙风格主题
+THEME = {
+    "app_bg": "#F7F9FF",
+    "app_bg_alt": "#EEF4FF",
+    "title_grad": ("#A7B8FF", "#D6C6FF"),
+    "title_bg": "#C3C1FF",
+    "card_bg": "#FFFFFF",
+    "card_shadow": "#E9EEF9",
+    "card_border": "#E6ECF7",
+    "text": "#2A2E3A",
+    "text_sub": "#6B7586",
+    "text_muted": "#AAB3C2",
+    "accent": "#5A86FF",
+    "accent_soft": "#E7EEFF",
+    "success": "#7FE7C4",
+    "warning": "#FFD399",
+    "danger": "#FFB2B2",
+    "input_bg": "#F4F7FF",
+    "log_bg": "#F6F8FF",
+    "button_primary": "#9EC9FF",
+    "button_primary_text": "#1F4F9A",
+    "button_stop": "#FFB2B2",
+    "button_stop_text": "#A64242",
+    "card_gradients": [
+        ("#9FE7E5", "#D8F7E7"),
+        ("#FFD6A5", "#FFF3B0"),
+        ("#FFB7C5", "#FFD4E1"),
+        ("#B8D6FF", "#DDF1FF"),
+    ],
+}
+
+
+def _rgb_8bit(widget, color):
+    r, g, b = widget.winfo_rgb(color)
+    return r // 256, g // 256, b // 256
+
+
+class GradientFrame(tk.Canvas):
+    """Lightweight gradient background with optional content container."""
+
+    def __init__(self, parent, color1, color2, orient="vertical", use_content=True, content_bg=None, **kwargs):
+        super().__init__(parent, highlightthickness=0, bd=0, **kwargs)
+        s = self
+        s.color1 = color1
+        s.color2 = color2
+        s.orient = orient
+        s._content = None
+        s._content_id = None
+        if use_content:
+            bg = content_bg if content_bg is not None else kwargs.get("bg", THEME["app_bg"])
+            s._content = tk.Frame(s, bg=bg, highlightthickness=0, bd=0)
+            s._content_id = s.create_window(0, 0, anchor="nw", window=s._content)
+        s.bind("<Configure>", s._on_configure)
+
+    @property
+    def content(self):
+        return self._content
+
+    def _on_configure(self, event):
+        if self._content_id is not None:
+            self.coords(self._content_id, 0, 0)
+            self.itemconfig(self._content_id, width=event.width, height=event.height)
+        self._draw_gradient(event.width, event.height)
+
+    def _draw_gradient(self, width, height):
+        if width <= 0 or height <= 0:
+            return
+        self.delete("gradient")
+        steps = 120
+        r1, g1, b1 = _rgb_8bit(self, self.color1)
+        r2, g2, b2 = _rgb_8bit(self, self.color2)
+        for i in range(steps):
+            ratio = i / max(steps - 1, 1)
+            r = int(r1 + (r2 - r1) * ratio)
+            g = int(g1 + (g2 - g1) * ratio)
+            b = int(b1 + (b2 - b1) * ratio)
+            color = f"#{r:02x}{g:02x}{b:02x}"
+            if self.orient == "horizontal":
+                x0 = int(i * width / steps)
+                x1 = int((i + 1) * width / steps)
+                self.create_rectangle(x0, 0, x1, height, outline="", fill=color, tags=("gradient",))
+            else:
+                y0 = int(i * height / steps)
+                y1 = int((i + 1) * height / steps)
+                self.create_rectangle(0, y0, width, y1, outline="", fill=color, tags=("gradient",))
+        self.lower("gradient")
+
+
+class Card(tk.Frame):
+    """Simple card with soft shadow and optional gradient accent."""
+
+    def __init__(self, parent, theme, title=None, gradient=None, padding=(12, 10)):
+        super().__init__(parent, bg=theme["card_shadow"])
+        s = self
+        s.theme = theme
+        s.inner = tk.Frame(
+            s,
+            bg=theme["card_bg"],
+            highlightthickness=1,
+            highlightbackground=theme["card_border"],
+        )
+        s.inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+
+        if gradient:
+            bar = GradientFrame(
+                s.inner,
+                color1=gradient[0],
+                color2=gradient[1],
+                orient="horizontal",
+                use_content=False,
+                height=6,
+            )
+            bar.pack(fill=tk.X)
+
+        s.body = tk.Frame(s.inner, bg=theme["card_bg"])
+        s.body.pack(fill=tk.BOTH, expand=True, padx=padding[0], pady=padding[1])
+
+        if title:
+            s.title_label = tk.Label(
+                s.body,
+                text=title,
+                bg=theme["card_bg"],
+                fg=theme["text"],
+                font=("Microsoft YaHei UI", 10, "bold"),
+            )
+            s.title_label.pack(anchor=tk.W)
+            s.content = tk.Frame(s.body, bg=theme["card_bg"])
+            s.content.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        else:
+            s.content = s.body
 
 
 class Bot:
@@ -673,7 +805,28 @@ class GUI:
         s.rt.title("Linux.do 刷帖助手 v8.0")
         s.rt.geometry("750x850")
         s.rt.minsize(750, 750)  # 设置最小窗口大小
-        s.rt.configure(bg="#1a1a2e")
+        s.rt.configure(bg=THEME["app_bg"])
+
+        # 渐变背景容器
+        s.bg = GradientFrame(
+            s.rt,
+            color1=THEME["app_bg"],
+            color2=THEME["app_bg_alt"],
+            orient="vertical",
+            use_content=False,
+        )
+        s.bg.pack(fill=tk.BOTH, expand=True)
+        s.ui = tk.Frame(s.bg, bg=THEME["app_bg"])
+        s._ui_id = s.bg.create_window(0, 0, anchor="nw", window=s.ui)
+
+        def _layout_root(event):
+            margin = 8
+            width = max(event.width - margin * 2, 0)
+            height = max(event.height - margin * 2, 0)
+            s.bg.coords(s._ui_id, margin, margin)
+            s.bg.itemconfig(s._ui_id, width=width, height=height)
+
+        s.bg.bind("<Configure>", _layout_root, add="+")
 
         # 设置窗口图标
         try:
@@ -732,7 +885,7 @@ class GUI:
         # 创建托盘图标
         s.tray_icon = pystray.Icon(
             "LinuxDoHelper",
-            create_tray_image('#0f3460'),
+            create_tray_image(THEME["accent"]),
             "Linux.do 刷帖助手 - 就绪",
             create_menu()
         )
@@ -750,11 +903,11 @@ class GUI:
 
         # 根据状态设置不同颜色
         if status == "运行中":
-            color = '#00ff88'  # 绿色
+            color = THEME["success"]
         elif status == "已停止" or status == "已完成":
-            color = '#ffaa00'  # 橙色
+            color = THEME["warning"]
         else:
-            color = '#0f3460'  # 默认蓝色
+            color = THEME["accent"]
 
         # 更新图标
         s.tray_icon.icon = create_tray_image(color)
@@ -850,99 +1003,105 @@ class GUI:
         s.rt.destroy()
 
     def _ui(s):
-        # 自定义标题栏
-        title_bar = tk.Frame(s.rt, bg="#0f3460", height=40)
-        title_bar.pack(fill=tk.X)
-        title_bar.pack_propagate(False)
+        t = THEME
+        root = s.ui
 
-        # 标题栏可拖动
+        # 渐变标题栏
+        title_bar = GradientFrame(
+            root,
+            color1=t["title_grad"][0],
+            color2=t["title_grad"][1],
+            orient="horizontal",
+            use_content=False,
+            height=46,
+        )
+        title_bar.pack(fill=tk.X, padx=14, pady=(14, 10))
         title_bar.bind("<Button-1>", s._start_drag)
         title_bar.bind("<B1-Motion>", s._do_drag)
 
-        # 左侧图标和标题
-        title_left = tk.Frame(title_bar, bg="#0f3460")
-        title_left.pack(side=tk.LEFT, padx=10)
+        title_left = tk.Frame(title_bar, bg=t["title_bg"])
+        btn_frame = tk.Frame(title_bar, bg=t["title_bg"])
+
+        title_left_id = title_bar.create_window(12, 0, anchor="w", window=title_left)
+        btn_frame_id = title_bar.create_window(0, 0, anchor="e", window=btn_frame)
+
+        def _layout_title_bar(event):
+            y = event.height // 2
+            title_bar.coords(title_left_id, 12, y)
+            title_bar.coords(btn_frame_id, event.width - 12, y)
+
+        title_bar.bind("<Configure>", _layout_title_bar, add="+")
 
         tk.Label(
             title_left,
             text="◆",
             font=("Segoe UI", 14),
-            bg="#0f3460",
-            fg="#00d9ff",
-        ).pack(side=tk.LEFT, padx=(5, 8))
+            bg=t["title_bg"],
+            fg=t["accent"],
+        ).pack(side=tk.LEFT, padx=(6, 8))
 
         title_label = tk.Label(
             title_left,
             text="Linux.do 刷帖助手 v8.0",
             font=("Microsoft YaHei UI", 11, "bold"),
-            bg="#0f3460",
-            fg="#ffffff",
+            bg=t["title_bg"],
+            fg=t["text"],
         )
         title_label.pack(side=tk.LEFT)
         title_label.bind("<Button-1>", s._start_drag)
         title_label.bind("<B1-Motion>", s._do_drag)
+        title_left.bind("<Button-1>", s._start_drag)
+        title_left.bind("<B1-Motion>", s._do_drag)
+        btn_frame.bind("<Button-1>", s._start_drag)
+        btn_frame.bind("<B1-Motion>", s._do_drag)
 
-        # 右侧按钮
-        btn_frame = tk.Frame(title_bar, bg="#0f3460")
-        btn_frame.pack(side=tk.RIGHT, padx=5)
-
-        # 最小化按钮
         min_btn = tk.Label(
             btn_frame,
             text="─",
             font=("Segoe UI", 12),
-            bg="#0f3460",
-            fg="#ffffff",
+            bg=t["title_bg"],
+            fg=t["text"],
             width=4,
             cursor="hand2",
         )
         min_btn.pack(side=tk.LEFT, padx=2)
         min_btn.bind("<Button-1>", lambda e: s._minimize())
-        min_btn.bind("<Enter>", lambda e: min_btn.config(bg="#1a5490"))
-        min_btn.bind("<Leave>", lambda e: min_btn.config(bg="#0f3460"))
+        min_btn.bind("<Enter>", lambda e: min_btn.config(bg="#DDE7FF"))
+        min_btn.bind("<Leave>", lambda e: min_btn.config(bg=t["title_bg"]))
 
-        # 关闭按钮
         close_btn = tk.Label(
             btn_frame,
             text="✕",
             font=("Segoe UI", 12),
-            bg="#0f3460",
-            fg="#ffffff",
+            bg=t["title_bg"],
+            fg=t["text"],
             width=4,
             cursor="hand2",
         )
         close_btn.pack(side=tk.LEFT, padx=2)
         close_btn.bind("<Button-1>", lambda e: s._close())
-        close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#e94560"))
-        close_btn.bind("<Leave>", lambda e: close_btn.config(bg="#0f3460"))
+        close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#FFD4E1"))
+        close_btn.bind("<Leave>", lambda e: close_btn.config(bg=t["title_bg"]))
 
-        # 状态显示
         s.status = tk.StringVar(value="就绪")
         status_label = tk.Label(
             btn_frame,
             textvariable=s.status,
             font=("Microsoft YaHei UI", 9),
-            bg="#0f3460",
-            fg="#00d9ff",
+            bg=t["title_bg"],
+            fg=t["accent"],
         )
-        status_label.pack(side=tk.LEFT, padx=(0, 15))
+        status_label.pack(side=tk.LEFT, padx=(6, 12))
 
         # 内容区域
-        content = tk.Frame(s.rt, bg="#1a1a2e")
-        content.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        content = tk.Frame(root, bg=t["app_bg"])
+        content.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 14))
 
-        # 用户信息栏
-        info_frame = tk.LabelFrame(
-            content,
-            text=" 用户信息 ",
-            bg="#1a1a2e",
-            fg="#00d9ff",
-            font=("Microsoft YaHei UI", 10, "bold"),
-        )
-        info_frame.pack(fill=tk.X, padx=15, pady=5)
-
-        info_inner = tk.Frame(info_frame, bg="#1a1a2e")
-        info_inner.pack(fill=tk.X, padx=10, pady=5)
+        # 用户信息卡片
+        info_card = Card(content, t, title="用户信息", gradient=t["card_gradients"][0])
+        info_card.pack(fill=tk.X, pady=6)
+        info_inner = tk.Frame(info_card.content, bg=t["card_bg"])
+        info_inner.pack(fill=tk.X)
 
         s.user_label = tk.StringVar(value="用户: 未登录")
         s.level_label = tk.StringVar(value="等级: -")
@@ -951,39 +1110,36 @@ class GUI:
         tk.Label(
             info_inner,
             textvariable=s.user_label,
-            bg="#1a1a2e",
-            fg="#eaeaea",
+            bg=t["card_bg"],
+            fg=t["text_sub"],
             font=("Microsoft YaHei UI", 10),
         ).pack(side=tk.LEFT, padx=10)
         tk.Label(
             info_inner,
             textvariable=s.level_label,
-            bg="#1a1a2e",
-            fg="#00ff88",
+            bg=t["card_bg"],
+            fg=t["success"],
             font=("Microsoft YaHei UI", 10, "bold"),
         ).pack(side=tk.LEFT, padx=10)
         tk.Label(
             info_inner,
             textvariable=s.next_level_label,
-            bg="#1a1a2e",
-            fg="#ffaa00",
+            bg=t["card_bg"],
+            fg=t["warning"],
             font=("Microsoft YaHei UI", 10),
         ).pack(side=tk.LEFT, padx=10)
 
-        # 升级进度面板（使用固定高度的Canvas实现滚动）
-        progress_frame = tk.LabelFrame(
-            content,
-            text=" 升级进度追踪 ",
-            bg="#1a1a2e",
-            fg="#00d9ff",
-            font=("Microsoft YaHei UI", 10, "bold"),
-        )
-        progress_frame.pack(fill=tk.X, padx=15, pady=5)
+        # 升级进度卡片（使用固定高度的Canvas实现滚动）
+        progress_card = Card(content, t, title="升级进度追踪", gradient=t["card_gradients"][3])
+        progress_card.pack(fill=tk.X, pady=6)
 
-        # 创建Canvas和滚动条
-        s.progress_canvas = tk.Canvas(progress_frame, bg="#1a1a2e", height=200, highlightthickness=0)
-        s.progress_scrollbar = ttk.Scrollbar(progress_frame, orient="vertical", command=s.progress_canvas.yview)
-        s.progress_inner = tk.Frame(s.progress_canvas, bg="#1a1a2e")
+        s.progress_canvas = tk.Canvas(
+            progress_card.content, bg=t["card_bg"], height=200, highlightthickness=0, bd=0
+        )
+        s.progress_scrollbar = ttk.Scrollbar(
+            progress_card.content, orient="vertical", command=s.progress_canvas.yview
+        )
+        s.progress_inner = tk.Frame(s.progress_canvas, bg=t["card_bg"])
 
         s.progress_inner.bind(
             "<Configure>",
@@ -993,21 +1149,27 @@ class GUI:
         s.progress_canvas.create_window((0, 0), window=s.progress_inner, anchor="nw")
         s.progress_canvas.configure(yscrollcommand=s.progress_scrollbar.set)
 
-        s.progress_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        s.progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
+        s.progress_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2, pady=2)
+        s.progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=2)
 
-        # 控制栏
-        ctrl = tk.Frame(content, bg="#1a1a2e", pady=5)
-        ctrl.pack(fill=tk.X, padx=15)
-        tk.Label(ctrl, text="代理:", bg="#1a1a2e", fg="#eaeaea").pack(side=tk.LEFT)
+        # 运行控制卡片
+        ctrl_card = Card(content, t, title="运行控制", gradient=t["card_gradients"][1])
+        ctrl_card.pack(fill=tk.X, pady=6)
+        ctrl = tk.Frame(ctrl_card.content, bg=t["card_bg"])
+        ctrl.pack(fill=tk.X)
+        tk.Label(ctrl, text="代理:", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
         s.proxy_var = tk.StringVar(value=s.cfg["proxy"])
         tk.Entry(
             ctrl,
             textvariable=s.proxy_var,
             width=18,
-            bg="#16213e",
-            fg="#eaeaea",
-            insertbackground="#eaeaea",
+            bg=t["input_bg"],
+            fg=t["text"],
+            insertbackground=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
+            highlightcolor=t["accent"],
         ).pack(side=tk.LEFT, padx=5)
 
         s.start_btn = tk.Button(
@@ -1015,9 +1177,12 @@ class GUI:
             text="开始",
             command=s._start,
             width=10,
-            bg="#0f3460",
-            fg="white",
+            bg=t["button_primary"],
+            fg=t["button_primary_text"],
             font=("Microsoft YaHei UI", 10, "bold"),
+            relief="flat",
+            activebackground="#B6D7FF",
+            activeforeground=t["button_primary_text"],
         )
         s.start_btn.pack(side=tk.LEFT, padx=10)
         s.stop_btn = tk.Button(
@@ -1025,25 +1190,23 @@ class GUI:
             text="停止",
             command=s._stop,
             width=8,
-            bg="#e94560",
-            fg="white",
+            bg=t["button_stop"],
+            fg=t["button_stop_text"],
             state=tk.DISABLED,
+            relief="flat",
+            activebackground="#FFC9C9",
+            activeforeground=t["button_stop_text"],
         )
         s.stop_btn.pack(side=tk.LEFT)
 
         # 主区域
-        main = tk.Frame(content, bg="#1a1a2e")
-        main.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+        main = tk.Frame(content, bg=t["app_bg"])
+        main.pack(fill=tk.BOTH, expand=True, pady=6)
 
         # 左侧 - 板块选择
-        left = tk.LabelFrame(
-            main,
-            text=" 板块选择 ",
-            bg="#1a1a2e",
-            fg="#00d9ff",
-            font=("Microsoft YaHei UI", 10, "bold"),
-        )
-        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        left_card = Card(main, t, title="板块选择", gradient=t["card_gradients"][2])
+        left_card.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 12))
+        left = left_card.content
 
         s.cat_vars = {}
         for cat in s.cats:
@@ -1053,73 +1216,91 @@ class GUI:
                 left,
                 text=cat["n"],
                 variable=var,
-                bg="#1a1a2e",
-                fg="#eaeaea",
-                selectcolor="#0f3460",
-                activebackground="#1a1a2e",
+                bg=t["card_bg"],
+                fg=t["text_sub"],
+                selectcolor=t["accent_soft"],
+                activebackground=t["card_bg"],
+                activeforeground=t["text"],
                 command=lambda n=cat["n"], v=var: s._toggle_cat(n, v),
             )
             cb.pack(anchor=tk.W, pady=1)
 
         # 右侧
-        right = tk.Frame(main, bg="#1a1a2e")
+        right = tk.Frame(main, bg=t["app_bg"])
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # 日志区域
-        tk.Label(
-            right,
-            text="运行日志",
-            bg="#1a1a2e",
-            fg="#00d9ff",
-            font=("Microsoft YaHei UI", 10, "bold"),
-        ).pack(anchor=tk.W)
+        # 日志卡片
+        log_card = Card(right, t, title="运行日志", gradient=t["card_gradients"][3], padding=(12, 8))
+        log_card.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
         s.log = scrolledtext.ScrolledText(
-            right,
+            log_card.content,
             height=14,
-            bg="#16213e",
-            fg="#eaeaea",
+            bg=t["log_bg"],
+            fg=t["text"],
             font=("Consolas", 9),
-            insertbackground="#eaeaea",
+            insertbackground=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
         )
-        s.log.pack(fill=tk.BOTH, expand=True, pady=5)
+        s.log.pack(fill=tk.BOTH, expand=True, pady=2)
         s.log.config(state=tk.DISABLED)
 
-        # 参数设置
-        param = tk.Frame(right, bg="#1a1a2e")
-        param.pack(fill=tk.X, pady=5)
-        tk.Label(param, text="点赞率:", bg="#1a1a2e", fg="#eaeaea").pack(side=tk.LEFT)
+        # 参数设置卡片
+        param_card = Card(right, t, title="参数设置", gradient=t["card_gradients"][1])
+        param_card.pack(fill=tk.X, pady=8)
+        param = tk.Frame(param_card.content, bg=t["card_bg"])
+        param.pack(fill=tk.X)
+        tk.Label(param, text="点赞率:", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
         s.like_var = tk.StringVar(value="30")
         tk.Entry(
-            param, textvariable=s.like_var, width=4, bg="#16213e", fg="#eaeaea"
+            param,
+            textvariable=s.like_var,
+            width=4,
+            bg=t["input_bg"],
+            fg=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
+            highlightcolor=t["accent"],
         ).pack(side=tk.LEFT)
-        tk.Label(param, text="%  回复率:", bg="#1a1a2e", fg="#eaeaea").pack(
+        tk.Label(param, text="%  回复率:", bg=t["card_bg"], fg=t["text_sub"]).pack(
             side=tk.LEFT, padx=(10, 0)
         )
         s.reply_var = tk.StringVar(value="5")
         tk.Entry(
-            param, textvariable=s.reply_var, width=4, bg="#16213e", fg="#eaeaea"
+            param,
+            textvariable=s.reply_var,
+            width=4,
+            bg=t["input_bg"],
+            fg=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
+            highlightcolor=t["accent"],
         ).pack(side=tk.LEFT)
-        tk.Label(param, text="%  等待:", bg="#1a1a2e", fg="#eaeaea").pack(
+        tk.Label(param, text="%  等待:", bg=t["card_bg"], fg=t["text_sub"]).pack(
             side=tk.LEFT, padx=(10, 0)
         )
         s.wait_var = tk.StringVar(value="1-3")
         tk.Entry(
-            param, textvariable=s.wait_var, width=6, bg="#16213e", fg="#eaeaea"
+            param,
+            textvariable=s.wait_var,
+            width=6,
+            bg=t["input_bg"],
+            fg=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
+            highlightcolor=t["accent"],
         ).pack(side=tk.LEFT)
-        tk.Label(param, text="秒", bg="#1a1a2e", fg="#eaeaea").pack(side=tk.LEFT)
+        tk.Label(param, text="秒", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
 
-        # 统计信息
-        stats_frame = tk.LabelFrame(
-            right,
-            text=" 本次统计 ",
-            bg="#1a1a2e",
-            fg="#00d9ff",
-            font=("Microsoft YaHei UI", 10, "bold"),
-        )
-        stats_frame.pack(fill=tk.X, pady=5)
-
-        stats_inner = tk.Frame(stats_frame, bg="#1a1a2e")
-        stats_inner.pack(fill=tk.X, padx=10, pady=5)
+        # 统计信息卡片
+        stats_card = Card(right, t, title="本次统计", gradient=t["card_gradients"][0])
+        stats_card.pack(fill=tk.X, pady=(0, 6))
+        stats_inner = tk.Frame(stats_card.content, bg=t["card_bg"])
+        stats_inner.pack(fill=tk.X)
 
         s.stats_topic = tk.StringVar(value="帖子: 0")
         s.stats_like = tk.StringVar(value="点赞: 0")
@@ -1128,22 +1309,22 @@ class GUI:
         tk.Label(
             stats_inner,
             textvariable=s.stats_topic,
-            bg="#1a1a2e",
-            fg="#eaeaea",
+            bg=t["card_bg"],
+            fg=t["text_sub"],
             font=("Microsoft YaHei UI", 10),
         ).pack(side=tk.LEFT, padx=15)
         tk.Label(
             stats_inner,
             textvariable=s.stats_like,
-            bg="#1a1a2e",
-            fg="#eaeaea",
+            bg=t["card_bg"],
+            fg=t["text_sub"],
             font=("Microsoft YaHei UI", 10),
         ).pack(side=tk.LEFT, padx=15)
         tk.Label(
             stats_inner,
             textvariable=s.stats_reply,
-            bg="#1a1a2e",
-            fg="#eaeaea",
+            bg=t["card_bg"],
+            fg=t["text_sub"],
             font=("Microsoft YaHei UI", 10),
         ).pack(side=tk.LEFT, padx=15)
 
@@ -1202,6 +1383,7 @@ class GUI:
 
     def _build_progress_panel(s, requirements):
         """构建升级进度面板"""
+        t = THEME
         # 清除旧内容
         for widget in s.progress_inner.winfo_children():
             widget.destroy()
@@ -1218,8 +1400,8 @@ class GUI:
             tk.Label(
                 s.progress_inner,
                 text=header,
-                bg="#1a1a2e",
-                fg="#00d9ff",
+                bg=t["card_bg"],
+                fg=t["accent"],
                 font=("Microsoft YaHei UI", 9, "bold"),
                 anchor="w",
             ).grid(row=0, column=col, padx=col_padx[col], pady=5, sticky="w")
@@ -1234,8 +1416,8 @@ class GUI:
             tk.Label(
                 s.progress_inner,
                 text=name,
-                bg="#1a1a2e",
-                fg="#eaeaea",
+                bg=t["card_bg"],
+                fg=t["text_sub"],
                 font=("Microsoft YaHei UI", 9),
                 anchor="w",
             ).grid(row=row, column=0, padx=col_padx[0], pady=3, sticky="w")
@@ -1244,8 +1426,8 @@ class GUI:
             tk.Label(
                 s.progress_inner,
                 text=current,
-                bg="#1a1a2e",
-                fg="#888888",
+                bg=t["card_bg"],
+                fg=t["text_muted"],
                 font=("Microsoft YaHei UI", 9),
                 anchor="w",
             ).grid(row=row, column=1, padx=col_padx[1], pady=3, sticky="w")
@@ -1255,8 +1437,8 @@ class GUI:
             tk.Label(
                 s.progress_inner,
                 textvariable=current_var,
-                bg="#1a1a2e",
-                fg="#00ff88",
+                bg=t["card_bg"],
+                fg=t["accent"],
                 font=("Microsoft YaHei UI", 9, "bold"),
                 anchor="w",
             ).grid(row=row, column=2, padx=col_padx[2], pady=3, sticky="w")
@@ -1265,8 +1447,8 @@ class GUI:
             tk.Label(
                 s.progress_inner,
                 text=required,
-                bg="#1a1a2e",
-                fg="#ffaa00",
+                bg=t["card_bg"],
+                fg=t["warning"],
                 font=("Microsoft YaHei UI", 9),
                 anchor="w",
             ).grid(row=row, column=3, padx=col_padx[3], pady=3, sticky="w")
@@ -1276,8 +1458,8 @@ class GUI:
             tk.Label(
                 s.progress_inner,
                 textvariable=added_var,
-                bg="#1a1a2e",
-                fg="#00d9ff",
+                bg=t["card_bg"],
+                fg=t["accent"],
                 font=("Microsoft YaHei UI", 9, "bold"),
                 anchor="w",
             ).grid(row=row, column=4, padx=col_padx[4], pady=3, sticky="w")
