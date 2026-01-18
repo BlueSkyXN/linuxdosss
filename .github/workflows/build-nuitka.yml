@@ -112,7 +112,13 @@ jobs:
       - name: Rename artifact (macOS)
         if: runner.os == 'macOS'
         run: |
-          mv dist/${{ env.APP_NAME }}.app dist/${{ matrix.app_dir_name }}
+          app_path=$(find dist -maxdepth 1 -type d -name "*.app" -print -quit)
+          if [ -z "$app_path" ]; then
+            echo "No .app bundle found in dist"
+            ls -la dist
+            exit 1
+          fi
+          mv "$app_path" "dist/${{ matrix.app_dir_name }}"
 
       - name: Zip macOS app
         if: runner.os == 'macOS'

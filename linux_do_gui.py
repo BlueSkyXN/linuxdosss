@@ -804,7 +804,8 @@ class GUI:
         s.rt = tk.Tk()
         s.rt.title("Linux.do 刷帖助手 v8.0")
         s.rt.geometry("750x850")
-        s.rt.minsize(750, 750)  # 设置最小窗口大小
+        s._min_w, s._min_h = 750, 750
+        s.rt.minsize(s._min_w, s._min_h)  # 设置最小窗口大小
         s.rt.configure(bg=THEME["app_bg"])
 
         # 渐变背景容器
@@ -857,6 +858,7 @@ class GUI:
         s._stop_requested = False
 
         s._ui()
+        s._init_resize_grips()
 
         # 窗口居中
         s._center_window()
@@ -976,6 +978,69 @@ class GUI:
         x = s.rt.winfo_x() + event.x - s._drag_x
         y = s.rt.winfo_y() + event.y - s._drag_y
         s.rt.geometry(f"+{x}+{y}")
+
+    def _init_resize_grips(s):
+        """为无边框窗口添加缩放拖拽区域"""
+        s._resize_dir = None
+        s._resize_start = (0, 0)
+        s._resize_geom = (0, 0, 0, 0)
+        border = 6
+
+        def start_resize(event, direction):
+            s._resize_dir = direction
+            s._resize_start = (event.x_root, event.y_root)
+            s._resize_geom = (
+                s.rt.winfo_x(),
+                s.rt.winfo_y(),
+                s.rt.winfo_width(),
+                s.rt.winfo_height(),
+            )
+
+        def do_resize(event):
+            if not s._resize_dir:
+                return
+            dx = event.x_root - s._resize_start[0]
+            dy = event.y_root - s._resize_start[1]
+            x, y, w, h = s._resize_geom
+            min_w, min_h = s._min_w, s._min_h
+
+            if "e" in s._resize_dir:
+                w = max(min_w, w + dx)
+            if "s" in s._resize_dir:
+                h = max(min_h, h + dy)
+            if "w" in s._resize_dir:
+                new_w = max(min_w, w - dx)
+                x = x + (w - new_w)
+                w = new_w
+            if "n" in s._resize_dir:
+                new_h = max(min_h, h - dy)
+                y = y + (h - new_h)
+                h = new_h
+
+            s.rt.geometry(f"{w}x{h}+{x}+{y}")
+
+        def end_resize(_event):
+            s._resize_dir = None
+
+        def grip(cursor, relx, rely, relw, relh, x, y, w, h, direction):
+            frame = tk.Frame(s.rt, bg=THEME["app_bg"], cursor=cursor)
+            frame.place(relx=relx, rely=rely, relwidth=relw, relheight=relh, x=x, y=y, width=w, height=h)
+            frame.bind("<Button-1>", lambda e: start_resize(e, direction))
+            frame.bind("<B1-Motion>", do_resize)
+            frame.bind("<ButtonRelease-1>", end_resize)
+            frame.lift()
+            return frame
+
+        s._grips = [
+            grip("size_ns", 0, 0, 1, 0, border, 0, -border * 2, border, "n"),
+            grip("size_ns", 0, 1, 1, 0, border, -border, -border * 2, border, "s"),
+            grip("size_we", 0, 0, 0, 1, 0, border, border, -border * 2, "w"),
+            grip("size_we", 1, 0, 0, 1, -border, border, border, -border * 2, "e"),
+            grip("size_nw_se", 0, 0, 0, 0, 0, 0, border, border, "nw"),
+            grip("size_ne_sw", 1, 0, 0, 0, -border, 0, border, border, "ne"),
+            grip("size_ne_sw", 0, 1, 0, 0, 0, -border, border, border, "sw"),
+            grip("size_nw_se", 1, 1, 0, 0, -border, -border, border, border, "se"),
+        ]
 
     def _minimize(s):
         """最小化窗口"""
@@ -1099,14 +1164,13 @@ class GUI:
 
         body = tk.Frame(content, bg=t["app_bg"])
         body.pack(fill=tk.BOTH, expand=True)
+        body.grid_columnconfigure(0, weight=0)
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
         # 左侧菜单
-        menu_card = Card(body, t, title="菜单", gradient=t["card_gradients"][2], padding=(8, 8))
+        menu_card = Card(body, t, title="菜单", gradient=t["card_gradients"][2], padding=(4, 6))
         menu_card.grid(row=0, column=0, sticky="ns", padx=(0, 12))
-        menu_card.configure(width=180)
-        menu_card.grid_propagate(False)
 
         s.menu_buttons = {}
 
@@ -1119,9 +1183,9 @@ class GUI:
                 fg=t["text_sub"],
                 relief="flat",
                 anchor="w",
-                padx=12,
-                pady=6,
-                font=("Microsoft YaHei UI", 10),
+                padx=8,
+                pady=5,
+                font=("Microsoft YaHei UI", 9),
                 activebackground=t["accent_soft"],
                 activeforeground=t["accent"],
             )
