@@ -4,7 +4,7 @@ on:
   push:
     tags:
       - 'v*'
-    branches:requirements.txt
+    branches:
       - main
       - master
       - dev
