@@ -1097,9 +1097,72 @@ class GUI:
         content = tk.Frame(root, bg=t["app_bg"])
         content.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 14))
 
+        body = tk.Frame(content, bg=t["app_bg"])
+        body.pack(fill=tk.BOTH, expand=True)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        # 左侧菜单
+        menu_card = Card(body, t, title="菜单", gradient=t["card_gradients"][2], padding=(8, 8))
+        menu_card.grid(row=0, column=0, sticky="ns", padx=(0, 12))
+        menu_card.configure(width=180)
+        menu_card.grid_propagate(False)
+
+        s.menu_buttons = {}
+
+        def add_menu(text, key):
+            btn = tk.Button(
+                menu_card.content,
+                text=text,
+                command=lambda k=key: s._show_page(k),
+                bg=t["card_bg"],
+                fg=t["text_sub"],
+                relief="flat",
+                anchor="w",
+                padx=12,
+                pady=6,
+                font=("Microsoft YaHei UI", 10),
+                activebackground=t["accent_soft"],
+                activeforeground=t["accent"],
+            )
+            btn.pack(fill=tk.X, pady=4)
+            s.menu_buttons[key] = btn
+
+        add_menu("运行面板", "main")
+        add_menu("升级进度", "progress")
+        add_menu("板块选择", "cats")
+
+        # 页面容器
+        page_container = tk.Frame(body, bg=t["app_bg"])
+        page_container.grid(row=0, column=1, sticky="nsew")
+        page_container.grid_columnconfigure(0, weight=1)
+        page_container.grid_rowconfigure(0, weight=1)
+
+        s.pages = {}
+
+        page_main = tk.Frame(page_container, bg=t["app_bg"])
+        page_progress = tk.Frame(page_container, bg=t["app_bg"])
+        page_cats = tk.Frame(page_container, bg=t["app_bg"])
+
+        for page in (page_main, page_progress, page_cats):
+            page.grid(row=0, column=0, sticky="nsew")
+
+        s.pages["main"] = page_main
+        s.pages["progress"] = page_progress
+        s.pages["cats"] = page_cats
+
+        # 运行面板布局
+        page_main.grid_columnconfigure(1, weight=1)
+        page_main.grid_rowconfigure(0, weight=1)
+        main_left = tk.Frame(page_main, bg=t["app_bg"])
+        main_right = tk.Frame(page_main, bg=t["app_bg"])
+        main_left.grid(row=0, column=0, sticky="ns", padx=(0, 12))
+        main_right.grid(row=0, column=1, sticky="nsew")
+        main_right.grid_rowconfigure(0, weight=1)
+
         # 用户信息卡片
-        info_card = Card(content, t, title="用户信息", gradient=t["card_gradients"][0])
-        info_card.pack(fill=tk.X, pady=6)
+        info_card = Card(main_left, t, title="用户信息", gradient=t["card_gradients"][0])
+        info_card.pack(fill=tk.X, pady=(0, 8))
         info_inner = tk.Frame(info_card.content, bg=t["card_bg"])
         info_inner.pack(fill=tk.X)
 
@@ -1129,38 +1192,16 @@ class GUI:
             font=("Microsoft YaHei UI", 10),
         ).pack(side=tk.LEFT, padx=10)
 
-        # 升级进度卡片（使用固定高度的Canvas实现滚动）
-        progress_card = Card(content, t, title="升级进度追踪", gradient=t["card_gradients"][3])
-        progress_card.pack(fill=tk.X, pady=6)
+        # 运行控制卡片（含参数与统计）
+        ctrl_card = Card(main_left, t, title="运行控制", gradient=t["card_gradients"][1])
+        ctrl_card.pack(fill=tk.X, pady=8)
 
-        s.progress_canvas = tk.Canvas(
-            progress_card.content, bg=t["card_bg"], height=200, highlightthickness=0, bd=0
-        )
-        s.progress_scrollbar = ttk.Scrollbar(
-            progress_card.content, orient="vertical", command=s.progress_canvas.yview
-        )
-        s.progress_inner = tk.Frame(s.progress_canvas, bg=t["card_bg"])
-
-        s.progress_inner.bind(
-            "<Configure>",
-            lambda e: s.progress_canvas.configure(scrollregion=s.progress_canvas.bbox("all"))
-        )
-
-        s.progress_canvas.create_window((0, 0), window=s.progress_inner, anchor="nw")
-        s.progress_canvas.configure(yscrollcommand=s.progress_scrollbar.set)
-
-        s.progress_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2, pady=2)
-        s.progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=2)
-
-        # 运行控制卡片
-        ctrl_card = Card(content, t, title="运行控制", gradient=t["card_gradients"][1])
-        ctrl_card.pack(fill=tk.X, pady=6)
-        ctrl = tk.Frame(ctrl_card.content, bg=t["card_bg"])
-        ctrl.pack(fill=tk.X)
-        tk.Label(ctrl, text="代理:", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
+        proxy_row = tk.Frame(ctrl_card.content, bg=t["card_bg"])
+        proxy_row.pack(fill=tk.X, pady=(0, 6))
+        tk.Label(proxy_row, text="代理:", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
         s.proxy_var = tk.StringVar(value=s.cfg["proxy"])
         tk.Entry(
-            ctrl,
+            proxy_row,
             textvariable=s.proxy_var,
             width=18,
             bg=t["input_bg"],
@@ -1170,10 +1211,12 @@ class GUI:
             highlightthickness=1,
             highlightbackground=t["card_border"],
             highlightcolor=t["accent"],
-        ).pack(side=tk.LEFT, padx=5)
+        ).pack(side=tk.LEFT, padx=6)
 
+        btn_row = tk.Frame(ctrl_card.content, bg=t["card_bg"])
+        btn_row.pack(fill=tk.X, pady=(0, 6))
         s.start_btn = tk.Button(
-            ctrl,
+            btn_row,
             text="开始",
             command=s._start,
             width=10,
@@ -1184,9 +1227,9 @@ class GUI:
             activebackground="#B6D7FF",
             activeforeground=t["button_primary_text"],
         )
-        s.start_btn.pack(side=tk.LEFT, padx=10)
+        s.start_btn.pack(side=tk.LEFT)
         s.stop_btn = tk.Button(
-            ctrl,
+            btn_row,
             text="停止",
             command=s._stop,
             width=8,
@@ -1197,59 +1240,16 @@ class GUI:
             activebackground="#FFC9C9",
             activeforeground=t["button_stop_text"],
         )
-        s.stop_btn.pack(side=tk.LEFT)
+        s.stop_btn.pack(side=tk.LEFT, padx=8)
 
-        # 主区域
-        main = tk.Frame(content, bg=t["app_bg"])
-        main.pack(fill=tk.BOTH, expand=True, pady=6)
-
-        # 左侧 - 板块选择
-        left_card = Card(main, t, title="板块选择", gradient=t["card_gradients"][2])
-        left_card.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 12))
-        left = left_card.content
-
-        s.cat_vars = {}
-        for cat in s.cats:
-            var = tk.BooleanVar(value=cat.get("e", True))
-            s.cat_vars[cat["n"]] = var
-            cb = tk.Checkbutton(
-                left,
-                text=cat["n"],
-                variable=var,
-                bg=t["card_bg"],
-                fg=t["text_sub"],
-                selectcolor=t["accent_soft"],
-                activebackground=t["card_bg"],
-                activeforeground=t["text"],
-                command=lambda n=cat["n"], v=var: s._toggle_cat(n, v),
-            )
-            cb.pack(anchor=tk.W, pady=1)
-
-        # 右侧
-        right = tk.Frame(main, bg=t["app_bg"])
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
-        # 日志卡片
-        log_card = Card(right, t, title="运行日志", gradient=t["card_gradients"][3], padding=(12, 8))
-        log_card.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
-        s.log = scrolledtext.ScrolledText(
-            log_card.content,
-            height=14,
-            bg=t["log_bg"],
-            fg=t["text"],
-            font=("Consolas", 9),
-            insertbackground=t["text"],
-            relief="flat",
-            highlightthickness=1,
-            highlightbackground=t["card_border"],
-        )
-        s.log.pack(fill=tk.BOTH, expand=True, pady=2)
-        s.log.config(state=tk.DISABLED)
-
-        # 参数设置卡片
-        param_card = Card(right, t, title="参数设置", gradient=t["card_gradients"][1])
-        param_card.pack(fill=tk.X, pady=8)
-        param = tk.Frame(param_card.content, bg=t["card_bg"])
+        tk.Label(
+            ctrl_card.content,
+            text="参数设置",
+            bg=t["card_bg"],
+            fg=t["text_muted"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(anchor="w", pady=(4, 2))
+        param = tk.Frame(ctrl_card.content, bg=t["card_bg"])
         param.pack(fill=tk.X)
         tk.Label(param, text="点赞率:", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
         s.like_var = tk.StringVar(value="30")
@@ -1296,10 +1296,14 @@ class GUI:
         ).pack(side=tk.LEFT)
         tk.Label(param, text="秒", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
 
-        # 统计信息卡片
-        stats_card = Card(right, t, title="本次统计", gradient=t["card_gradients"][0])
-        stats_card.pack(fill=tk.X, pady=(0, 6))
-        stats_inner = tk.Frame(stats_card.content, bg=t["card_bg"])
+        tk.Label(
+            ctrl_card.content,
+            text="本次统计",
+            bg=t["card_bg"],
+            fg=t["text_muted"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(anchor="w", pady=(6, 2))
+        stats_inner = tk.Frame(ctrl_card.content, bg=t["card_bg"])
         stats_inner.pack(fill=tk.X)
 
         s.stats_topic = tk.StringVar(value="帖子: 0")
@@ -1312,21 +1316,93 @@ class GUI:
             bg=t["card_bg"],
             fg=t["text_sub"],
             font=("Microsoft YaHei UI", 10),
-        ).pack(side=tk.LEFT, padx=15)
+        ).pack(side=tk.LEFT, padx=4)
         tk.Label(
             stats_inner,
             textvariable=s.stats_like,
             bg=t["card_bg"],
             fg=t["text_sub"],
             font=("Microsoft YaHei UI", 10),
-        ).pack(side=tk.LEFT, padx=15)
+        ).pack(side=tk.LEFT, padx=4)
         tk.Label(
             stats_inner,
             textvariable=s.stats_reply,
             bg=t["card_bg"],
             fg=t["text_sub"],
             font=("Microsoft YaHei UI", 10),
-        ).pack(side=tk.LEFT, padx=15)
+        ).pack(side=tk.LEFT, padx=4)
+
+        # 运行日志卡片
+        log_card = Card(main_right, t, title="运行日志", gradient=t["card_gradients"][3], padding=(12, 8))
+        log_card.pack(fill=tk.BOTH, expand=True)
+        s.log = scrolledtext.ScrolledText(
+            log_card.content,
+            height=14,
+            bg=t["log_bg"],
+            fg=t["text"],
+            font=("Consolas", 9),
+            insertbackground=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
+        )
+        s.log.pack(fill=tk.BOTH, expand=True, pady=2)
+        s.log.config(state=tk.DISABLED)
+
+        # 升级进度页面
+        progress_card = Card(page_progress, t, title="升级进度追踪", gradient=t["card_gradients"][3])
+        progress_card.pack(fill=tk.BOTH, expand=True)
+        s.progress_canvas = tk.Canvas(
+            progress_card.content, bg=t["card_bg"], height=200, highlightthickness=0, bd=0
+        )
+        s.progress_scrollbar = ttk.Scrollbar(
+            progress_card.content, orient="vertical", command=s.progress_canvas.yview
+        )
+        s.progress_inner = tk.Frame(s.progress_canvas, bg=t["card_bg"])
+        s.progress_inner.bind(
+            "<Configure>",
+            lambda e: s.progress_canvas.configure(scrollregion=s.progress_canvas.bbox("all"))
+        )
+        s.progress_canvas.create_window((0, 0), window=s.progress_inner, anchor="nw")
+        s.progress_canvas.configure(yscrollcommand=s.progress_scrollbar.set)
+        s.progress_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2, pady=2)
+        s.progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=2)
+
+        # 板块选择页面
+        cats_card = Card(page_cats, t, title="板块选择", gradient=t["card_gradients"][2])
+        cats_card.pack(fill=tk.BOTH, expand=True)
+        left = cats_card.content
+
+        s.cat_vars = {}
+        for cat in s.cats:
+            var = tk.BooleanVar(value=cat.get("e", True))
+            s.cat_vars[cat["n"]] = var
+            cb = tk.Checkbutton(
+                left,
+                text=cat["n"],
+                variable=var,
+                bg=t["card_bg"],
+                fg=t["text_sub"],
+                selectcolor=t["accent_soft"],
+                activebackground=t["card_bg"],
+                activeforeground=t["text"],
+                command=lambda n=cat["n"], v=var: s._toggle_cat(n, v),
+            )
+            cb.pack(anchor=tk.W, pady=1)
+
+        s._show_page("main")
+
+    def _show_page(s, key):
+        page = s.pages.get(key)
+        if not page:
+            return
+        page.tkraise()
+        t = THEME
+        for name, btn in s.menu_buttons.items():
+            if name == key:
+                btn.config(bg=t["accent_soft"], fg=t["accent"])
+            else:
+                btn.config(bg=t["card_bg"], fg=t["text_sub"])
 
     def _toggle_cat(s, name, var):
         for cat in s.cats:
