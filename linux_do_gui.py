@@ -305,17 +305,25 @@ class Card(tk.Frame):
 
 
 class Bot:
-    def __init__(s, cfg, cats, lg, update_info=None, update_progress=None):
+    def __init__(s, cfg, cats, lg, update_info=None, update_progress=None, update_countdown=None,
+                 mode="endless", target_value=0, enable_like=True, enable_reply=True, enable_wait=True):
         s.cfg = cfg
         s.cats = cats
         s.lg = lg
         s.update_info = update_info
         s.update_progress = update_progress  # 新增：更新进度回调
+        s.update_countdown = update_countdown  # 新增：更新倒计时回调
+        s.mode = mode  # 运行模式：endless(无尽), topics(帖子数), time(时间限制)
+        s.target_value = target_value  # 目标值：帖子数或分钟数
+        s.enable_like = enable_like  # 是否启用自动点赞
+        s.enable_reply = enable_reply  # 是否启用自动回复
+        s.enable_wait = enable_wait  # 是否启用等待时间
         s.pg = None
         s.run = False
         s.stats = {"topic": 0, "like": 0, "reply": 0, "like_reply": 0}
         s.user_info = None
         s.level_requirements = []  # 保存升级要求
+        s.start_time = None  # 记录开始时间
 
     def _random_delay(s, min_sec=0.5, max_sec=2.0, reason=""):
         """防风控：随机延迟"""
@@ -323,6 +331,30 @@ class Bot:
         if reason:
             s.lg(f"[防风控] {reason}，等待 {delay:.1f}s")
         time.sleep(delay)
+
+    def _update_countdown_display(s):
+        """更新倒计时显示"""
+        if not s.update_countdown or not s.start_time:
+            return
+
+        elapsed_time = time.time() - s.start_time
+        elapsed_minutes = int(elapsed_time / 60)
+        elapsed_seconds = int(elapsed_time % 60)
+
+        if s.mode == "topics":
+            remaining = s.target_value - s.stats['topic']
+            text = f"剩余: {remaining} 个帖子 | 用时: {elapsed_minutes}:{elapsed_seconds:02d}"
+        elif s.mode == "time":
+            elapsed_mins = elapsed_time / 60
+            remaining_mins = s.target_value - elapsed_mins
+            if remaining_mins > 0:
+                text = f"剩余: {int(remaining_mins)} 分钟 | 帖子: {s.stats['topic']}"
+            else:
+                text = f"已超时 | 帖子: {s.stats['topic']}"
+        else:  # endless
+            text = f"用时: {elapsed_minutes}:{elapsed_seconds:02d} | 帖子: {s.stats['topic']}"
+
+        s.update_countdown(text)
 
     def start(s):
         s.lg("启动浏览器...")
@@ -695,21 +727,24 @@ class Bot:
 
             s.lg(f"找到 {btn_count} 个点赞按钮")
 
-            # 随机点赞主帖
-            if btn_count > 0 and random.random() < s.cfg["like_rate"]:
+            # 随机点赞主帖（检查开关）
+            if s.enable_like and btn_count > 0 and random.random() < s.cfg["like_rate"]:
                 s.do_like(0)
-                s._random_delay(s.cfg["wait_min"], s.cfg["wait_max"], "点赞后休息")
+                if s.enable_wait:
+                    s._random_delay(s.cfg["wait_min"], s.cfg["wait_max"], "点赞后休息")
 
-            # 随机点赞回复
-            if btn_count > 1:
+            # 随机点赞回复（检查开关）
+            if s.enable_like and btn_count > 1:
                 for i in range(1, min(btn_count, 5)):
                     if random.random() < s.cfg["like_reply_rate"]:
                         s.do_like(i)
-                        s._random_delay(s.cfg["wait_min"], s.cfg["wait_max"], "点赞回复后")
+                        if s.enable_wait:
+                            s._random_delay(s.cfg["wait_min"], s.cfg["wait_max"], "点赞回复后")
 
-            # 随机回帖
-            if random.random() < s.cfg["reply_rate"]:
-                s._random_delay(s.cfg["wait_min"], s.cfg["wait_max"], "准备回帖")
+            # 随机回帖（检查开关）
+            if s.enable_reply and random.random() < s.cfg["reply_rate"]:
+                if s.enable_wait:
+                    s._random_delay(s.cfg["wait_min"], s.cfg["wait_max"], "准备回帖")
                 s.do_reply()
 
             return True
@@ -734,11 +769,15 @@ class Bot:
             if not s.run:
                 break
 
+            # 检查帖子数量目标（避免超过目标值）
+            if s.mode == "topics" and s.target_value > 0 and s.stats['topic'] >= s.target_value:
+                break
+
             s.browse_topic(topic)
             browsed += 1
 
-            # 防风控：帖子之间随机等待
-            if s.run:
+            # 防风控：帖子之间随机等待（检查开关）
+            if s.run and s.enable_wait:
                 s._random_delay(s.cfg["wait_min"], s.cfg["wait_max"], "切换帖子")
 
         return browsed
@@ -746,6 +785,7 @@ class Bot:
     def run_session(s):
         s.run = True
         s.stats = {"topic": 0, "like": 0, "reply": 0, "like_reply": 0}
+        s.start_time = time.time()  # 记录开始时间
 
         if not s.start():
             return
@@ -765,16 +805,76 @@ class Bot:
             enabled = [c for c in s.cats if c.get("e", True)]
             random.shuffle(enabled)
 
-            s.lg("=" * 30)
+            # 显示运行模式
+            if s.mode == "topics":
+                s.lg("=" * 30)
+                s.lg(f"运行模式: 帖子数量限制 (目标: {s.target_value} 个帖子)")
+                s.lg("=" * 30)
+            elif s.mode == "time":
+                s.lg("=" * 30)
+                s.lg(f"运行模式: 时间限制 (目标: {s.target_value} 分钟)")
+                s.lg("=" * 30)
+            else:
+                s.lg("=" * 30)
+                s.lg("运行模式: 无尽模式 (手动停止)")
+                s.lg("=" * 30)
+
+            # 显示功能开关状态
+            features = []
+            if s.enable_like:
+                features.append("自动点赞")
+            if s.enable_reply:
+                features.append("自动回复")
+            if s.enable_wait:
+                features.append("等待延迟")
+            s.lg(f"启用功能: {', '.join(features) if features else '仅浏览'}")
+
             s.lg(f"开始浏览 {len(enabled)} 个板块")
             s.lg("=" * 30)
 
-            for cat in enabled:
-                if not s.run:
+            # 无尽循环板块
+            while s.run:
+                for cat in enabled:
+                    if not s.run:
+                        break
+
+                    # 检查是否达到目标
+                    if s.mode == "topics" and s.target_value > 0 and s.stats['topic'] >= s.target_value:
+                        s.lg(f"已达到目标帖子数: {s.stats['topic']}/{s.target_value}")
+                        s.run = False
+                        break
+
+                    if s.mode == "time" and s.target_value > 0:
+                        elapsed_minutes = (time.time() - s.start_time) / 60
+                        if elapsed_minutes >= s.target_value:
+                            s.lg(f"已达到目标时间: {int(elapsed_minutes)}/{s.target_value} 分钟")
+                            s.run = False
+                            break
+
+                    s.browse_cat(cat)
+
+                    # 更新倒计时显示
+                    s._update_countdown_display()
+
+                    # 板块之间随机等待（检查开关）
+                    if s.enable_wait and s.run:
+                        s._random_delay(s.cfg["wait_min"] + 1, s.cfg["wait_max"] + 2, "切换板块")
+
+                # 如果不是无尽模式，退出循环
+                if s.mode != "endless":
                     break
-                s.browse_cat(cat)
-                # 板块之间随机等待（板块切换用稍长一点的时间）
-                s._random_delay(s.cfg["wait_min"] + 1, s.cfg["wait_max"] + 2, "切换板块")
+
+                # 无尽模式：重新打乱板块顺序
+                if s.run:
+                    random.shuffle(enabled)
+                    s.lg("=" * 30)
+                    s.lg("继续下一轮浏览...")
+                    s.lg("=" * 30)
+
+            # 计算耗时
+            elapsed_time = time.time() - s.start_time
+            elapsed_minutes = int(elapsed_time / 60)
+            elapsed_seconds = int(elapsed_time % 60)
 
             s.lg("=" * 30)
             s.lg("完成!")
@@ -782,6 +882,7 @@ class Bot:
             s.lg(f"点赞主帖: {s.stats['like']}")
             s.lg(f"点赞回复: {s.stats['like_reply']}")
             s.lg(f"回帖数量: {s.stats['reply']}")
+            s.lg(f"总耗时: {elapsed_minutes} 分 {elapsed_seconds} 秒")
             s.lg("=" * 30)
 
             # 重新获取等级信息以验证效果（在关闭浏览器前）
@@ -896,7 +997,7 @@ class GUI:
         s.tray_thread = threading.Thread(target=s.tray_icon.run, daemon=True)
         s.tray_thread.start()
 
-    def _update_tray_status(s, status, stats=None):
+    def _update_tray_status(s, status, stats=None, mode=None, countdown=None):
         """更新托盘状态"""
         if not TRAY_SUPPORT or not s.tray_icon:
             return
@@ -915,15 +1016,24 @@ class GUI:
         s.tray_icon.icon = create_tray_image(color)
 
         # 更新提示文字
+        tooltip = f"Linux.do 刷帖助手 - {status}\n"
+
+        # 添加模式信息
+        if mode:
+            mode_text = {"endless": "无尽模式", "topics": "帖子数量模式", "time": "时间限制模式"}.get(mode, mode)
+            tooltip += f"模式: {mode_text}\n"
+
+        # 添加倒计时信息
+        if countdown:
+            tooltip += f"{countdown}\n"
+
+        # 添加统计信息
         if stats:
-            tooltip = f"Linux.do 刷帖助手 - {status}\n"
             tooltip += f"帖子: {stats.get('topic', 0)} | "
             tooltip += f"点赞: {stats.get('like', 0) + stats.get('like_reply', 0)} | "
             tooltip += f"回复: {stats.get('reply', 0)}"
-        else:
-            tooltip = f"Linux.do 刷帖助手 - {status}"
 
-        s.tray_icon.title = tooltip
+        s.tray_icon.title = tooltip.strip()
 
     def _show_window(s, icon=None, item=None):
         """显示窗口"""
@@ -1306,13 +1416,143 @@ class GUI:
         )
         s.stop_btn.pack(side=tk.LEFT, padx=8)
 
+        # 运行模式选择
+        tk.Label(
+            ctrl_card.content,
+            text="运行模式",
+            bg=t["card_bg"],
+            fg=t["text_muted"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(anchor="w", pady=(8, 2))
+        mode_frame = tk.Frame(ctrl_card.content, bg=t["card_bg"])
+        mode_frame.pack(fill=tk.X)
+
+        s.mode_var = tk.StringVar(value="endless")
+
+        tk.Radiobutton(
+            mode_frame,
+            text="无尽模式",
+            variable=s.mode_var,
+            value="endless",
+            bg=t["card_bg"],
+            fg=t["text_sub"],
+            selectcolor=t["accent_soft"],
+            activebackground=t["card_bg"],
+            activeforeground=t["accent"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        tk.Radiobutton(
+            mode_frame,
+            text="帖子数量:",
+            variable=s.mode_var,
+            value="topics",
+            bg=t["card_bg"],
+            fg=t["text_sub"],
+            selectcolor=t["accent_soft"],
+            activebackground=t["card_bg"],
+            activeforeground=t["accent"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(side=tk.LEFT, padx=(0, 2))
+
+        s.topics_var = tk.StringVar(value="50")
+        tk.Entry(
+            mode_frame,
+            textvariable=s.topics_var,
+            width=6,
+            bg=t["input_bg"],
+            fg=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
+            highlightcolor=t["accent"],
+        ).pack(side=tk.LEFT, padx=(0, 2))
+        tk.Label(mode_frame, text="个", bg=t["card_bg"], fg=t["text_sub"], font=("Microsoft YaHei UI", 9)).pack(side=tk.LEFT, padx=(0, 10))
+
+        tk.Radiobutton(
+            mode_frame,
+            text="时间限制:",
+            variable=s.mode_var,
+            value="time",
+            bg=t["card_bg"],
+            fg=t["text_sub"],
+            selectcolor=t["accent_soft"],
+            activebackground=t["card_bg"],
+            activeforeground=t["accent"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(side=tk.LEFT, padx=(0, 2))
+
+        s.time_var = tk.StringVar(value="30")
+        tk.Entry(
+            mode_frame,
+            textvariable=s.time_var,
+            width=6,
+            bg=t["input_bg"],
+            fg=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["card_border"],
+            highlightcolor=t["accent"],
+        ).pack(side=tk.LEFT, padx=(0, 2))
+        tk.Label(mode_frame, text="分钟", bg=t["card_bg"], fg=t["text_sub"], font=("Microsoft YaHei UI", 9)).pack(side=tk.LEFT)
+
+        # 功能开关
+        tk.Label(
+            ctrl_card.content,
+            text="功能开关",
+            bg=t["card_bg"],
+            fg=t["text_muted"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(anchor="w", pady=(8, 2))
+        toggle_frame = tk.Frame(ctrl_card.content, bg=t["card_bg"])
+        toggle_frame.pack(fill=tk.X)
+
+        s.enable_like_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            toggle_frame,
+            text="自动点赞",
+            variable=s.enable_like_var,
+            bg=t["card_bg"],
+            fg=t["text_sub"],
+            selectcolor=t["accent_soft"],
+            activebackground=t["card_bg"],
+            activeforeground=t["accent"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        s.enable_reply_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            toggle_frame,
+            text="自动回复",
+            variable=s.enable_reply_var,
+            bg=t["card_bg"],
+            fg=t["text_sub"],
+            selectcolor=t["accent_soft"],
+            activebackground=t["card_bg"],
+            activeforeground=t["accent"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        s.enable_wait_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            toggle_frame,
+            text="启用等待",
+            variable=s.enable_wait_var,
+            bg=t["card_bg"],
+            fg=t["text_sub"],
+            selectcolor=t["accent_soft"],
+            activebackground=t["card_bg"],
+            activeforeground=t["accent"],
+            font=("Microsoft YaHei UI", 9),
+        ).pack(side=tk.LEFT)
+
         tk.Label(
             ctrl_card.content,
             text="参数设置",
             bg=t["card_bg"],
             fg=t["text_muted"],
             font=("Microsoft YaHei UI", 9),
-        ).pack(anchor="w", pady=(4, 2))
+        ).pack(anchor="w", pady=(8, 2))
         param = tk.Frame(ctrl_card.content, bg=t["card_bg"])
         param.pack(fill=tk.X)
         tk.Label(param, text="点赞率:", bg=t["card_bg"], fg=t["text_sub"]).pack(side=tk.LEFT)
@@ -1399,6 +1639,18 @@ class GUI:
         # 运行日志卡片
         log_card = Card(main_right, t, title="运行日志", gradient=t["card_gradients"][3], padding=(12, 8))
         log_card.pack(fill=tk.BOTH, expand=True)
+
+        # 倒计时显示
+        s.countdown_var = tk.StringVar(value="")
+        s.countdown_label = tk.Label(
+            log_card.content,
+            textvariable=s.countdown_var,
+            bg=t["card_bg"],
+            fg=t["accent"],
+            font=("Microsoft YaHei UI", 10, "bold"),
+        )
+        s.countdown_label.pack(anchor="w", pady=(0, 4))
+
         s.log = scrolledtext.ScrolledText(
             log_card.content,
             height=14,
@@ -1663,6 +1915,15 @@ class GUI:
 
         s.rt.after(0, log)
 
+    def _update_countdown(s, text):
+        """更新倒计时显示"""
+        def update():
+            s.countdown_var.set(text)
+            # 同步更新托盘信息
+            if s.bot:
+                s._update_tray_status("运行中", s.bot.stats, s.bot.mode, text)
+        s.rt.after(0, update)
+
     def _start(s):
         if s.th and s.th.is_alive():
             return
@@ -1694,7 +1955,28 @@ class GUI:
         s.initial_requirements = []
         s._stop_requested = False
 
-        s.bot = Bot(s.cfg, s.cats, s._lg, s._update_info, s._update_progress)
+        # 读取运行模式
+        mode = s.mode_var.get()
+        target_value = 0
+        if mode == "topics":
+            try:
+                target_value = int(s.topics_var.get())
+            except:
+                target_value = 50
+        elif mode == "time":
+            try:
+                target_value = int(s.time_var.get())
+            except:
+                target_value = 30
+
+        # 读取功能开关
+        enable_like = s.enable_like_var.get()
+        enable_reply = s.enable_reply_var.get()
+        enable_wait = s.enable_wait_var.get()
+
+        s.bot = Bot(s.cfg, s.cats, s._lg, s._update_info, s._update_progress, s._update_countdown,
+                    mode=mode, target_value=target_value,
+                    enable_like=enable_like, enable_reply=enable_reply, enable_wait=enable_wait)
         s.th = threading.Thread(target=s._run, daemon=True)
         s.th.start()
 
@@ -1707,6 +1989,8 @@ class GUI:
     def _done(s):
         s.start_btn.config(state=tk.NORMAL)
         s.stop_btn.config(state=tk.DISABLED)
+        # 清空倒计时显示
+        s.countdown_var.set("")
         if s._stop_requested:
             s.status.set("已停止")
             if s.bot:
